@@ -1,6 +1,7 @@
 """Tests for the utils module in the perms app."""
 import pytest
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth import get_user_model
 from django.db.models import Q
 from installs.models import Install, Location
 from perms.utils import (
@@ -8,7 +9,10 @@ from perms.utils import (
     get_perm_name,
     resolve_contenttype_from_perm,
     resolve_perm,
+    modify_object_safely
 )
+
+User = get_user_model()
 
 
 @pytest.mark.parametrize(
@@ -101,3 +105,39 @@ def test_resolve_contenttype_from_perm_invalid_format():
     """Test resolve_contenttype_from_perm with an invalid format."""
     with pytest.raises(ValueError):
         resolve_contenttype_from_perm("installs.invalid_format")
+
+
+from django.core.exceptions import PermissionDenied
+
+@pytest.mark.django_db
+def test_modify_object_safely():
+    """Test modify_object_safely.
+    
+    1. Set up a user with objectpermissions to add and change locations with a constraint on the "name" field.
+    2. Create a location with a name that matches the constraint.
+    3. Attempt to update the location with a name that does not match the constraint by calling modify_object_safely.
+    4. The update should fail and the location should not be updated.
+    """
+    # 1. Set up a user with permissions to add and change installs with a constraint on the "name" field.
+    user = User.objects.create_user(email="user@example.com", password="password")
+    user.objectpermissions.create(
+        name="Add and change installs with 'Test' in the name",
+        actions=["add", "change"],
+        constraints=[{"name__icontains": "Test"}],
+    )
+    user.objectpermissions.first().object_types.add(
+        ContentType.objects.get_for_model(Location)
+    )
+    # 2. Create a location with a name that matches the constraint.
+    location = Location.objects.create(name="Test Location")
+    # 3. Attempt to update the location with a name that does not match the constraint by calling modify_object_safely.
+    with pytest.raises(PermissionDenied):
+        modify_object_safely(location, user, {"name": "New Location Name"})
+    # 4. The update should fail and the location should not be updated.
+    assert Location.objects.get(pk=location.pk).name == "Test Location"
+
+    # attempt to update the location with a name that matches the constraint
+    obj = modify_object_safely(location, user, {"name": "New Test Location Name"})
+    assert Location.objects.get(pk=location.pk).name == "New Test Location Name"
+    assert obj.name == "New Test Location Name"
+    assert obj == location
