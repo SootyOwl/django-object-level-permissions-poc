@@ -14,12 +14,12 @@ def get_filter_from_constraints(constraints: list[dict]) -> Q:
         Q: The Q object representing the constraints.
     """
     params = Q()
+    has_constraints = False
     for constraint in constraints:
         if constraint:
             params |= Q(**constraint)
-        else:
-            return Q()  # null constraint
-    return params
+            has_constraints = True
+    return params if has_constraints else Q()
 
 
 def resolve_perm(perm: str) -> tuple[str, str, str]:
