@@ -3,28 +3,17 @@ from django.contrib.auth.models import Group
 from django.db import models
 
 from customuser.models import CustomUser
+from perms.querysets import RestrictedQuerySet
 from perms.utils import get_filter_from_constraints, get_perm_name
 
 
-class RestrictedQuerySet(models.QuerySet):
-    """Usage: Model.objects.restrict(user=user, actions=['view'])"""
-
+class ObjectPermissionManager(models.Manager):
+    """Manager for the ObjectPermission model, for future use."""
+    def get_queryset(self):
+        return RestrictedQuerySet(self.model, using=self._db)
+    
     def restrict(self, user, action="view") -> models.QuerySet:
-        """Filter the queryset to only include objects that the specified user has the specified action for.
-
-        Args:
-            user (CustomUser): The user to restrict the queryset for.
-            actions (list[str], optional): The actions to filter the ObjectPermissions by. Defaults to None.
-        """
-        perm_name = get_perm_name(self.model, action)
-        if user.is_superuser:
-            return self
-        elif not user.is_authenticated or perm_name not in user.get_all_permissions():
-            return self.none()
-        else:
-            qfilter = get_filter_from_constraints(user._object_perm_cache[perm_name])
-            allowed_objects = self.model.objects.filter(qfilter)
-            return self.filter(pk__in=allowed_objects)
+        return self.get_queryset().restrict(user, action)
 
 
 class ObjectPermission(models.Model):
@@ -66,7 +55,7 @@ class ObjectPermission(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    objects = RestrictedQuerySet.as_manager()
+    objects = ObjectPermissionManager()
 
     class Meta:
         ordering = ["name"]
@@ -80,3 +69,7 @@ class ObjectPermission(models.Model):
         if type(self.constraints) is not list:
             return [self.constraints]
         return self.constraints
+
+    def as_filter(self):
+        """Return the constraints as a Q object."""
+        return get_filter_from_constraints(self.list_constraints())

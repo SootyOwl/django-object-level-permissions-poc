@@ -1,5 +1,6 @@
 from django.db import models
 # Create your models here.
+from perms.querysets import RestrictedQuerySet
 
 class Location(models.Model):
     """A location model."""
@@ -9,6 +10,8 @@ class Location(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = RestrictedQuerySet.as_manager()
     
     def __str__(self):
         return self.name
