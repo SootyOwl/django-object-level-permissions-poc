@@ -661,3 +661,42 @@ def test_assign_permission_with_multiple_groups_and_users_and_object_types_and_a
     assert not user2.has_perm(
         "installs.add_location", obj=location3
     ), "The user has the permission for the wrong location."
+
+
+# test the model manager's restrict method
+@pytest.fixture
+def object_permission_with_constraint(db, user_factory, location_factory):
+    user = user_factory()
+    location = location_factory()
+    # assert that the user does not have any permission yet
+    assert not user.has_perm("installs.view_location")
+
+    obj_perm = ObjectPermission(
+        name="Test permission",
+        enabled=True,
+        actions=["view"],
+        constraints=[{"id": location.id}],
+    )
+    obj_perm.save()
+    obj_perm.users.add(user)
+    obj_perm.object_types.add(ContentType.objects.get_for_model(Location))
+
+    return obj_perm
+
+
+@pytest.mark.django_db
+def test_object_permission_manager_restrict(
+    object_permission_with_constraint, location_factory
+):
+    """Test the restrict method of the Location model manager."""
+    location = Location.objects.get(
+        pk=object_permission_with_constraint.constraints[0]["id"]
+    )
+    location_no_perm = location_factory()
+
+    user = User.objects.get(pk=object_permission_with_constraint.users.first().pk)
+
+    # check that the queryset is restricted
+    assert Location.objects.restrict(user).count() == 1
+    assert Location.objects.restrict(user).first() == location
+    assert location_no_perm not in Location.objects.restrict(user)
