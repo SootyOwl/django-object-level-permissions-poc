@@ -8,7 +8,7 @@ packages = [{include = "olppoc"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-Django = "^4.2.3"
+Django = "^4.2.7"
 django-guardian = "^2.4.0"
 rules = "^3.3"
 
